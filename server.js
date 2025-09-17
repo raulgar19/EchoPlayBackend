@@ -315,27 +315,35 @@ app.post(
     { name: "audio", maxCount: 1 },
   ]),
   async (req, res) => {
+    console.log("Recibiendo archivos...");
+
     const { title, artist } = req.body;
     const coverFile = req.files.cover ? req.files.cover[0].filename : null;
     const audioFile = req.files.audio ? req.files.audio[0].filename : null;
 
     if (!title || !artist || !coverFile || !audioFile) {
+      console.error("Error: faltan datos requeridos");
       return res.status(400).json({ error: "Faltan datos requeridos" });
     }
 
+    console.log("Archivos recibidos con éxito");
+
     try {
-      // Guardar en la base de datos
+      console.log("Añadiendo información en la base de datos...");
       const result = await pool.query(
         "INSERT INTO songs (name, artist, cover, file) VALUES ($1, $2, $3, $4) RETURNING *",
         [title, artist, coverFile, audioFile]
       );
+      console.log("Información añadida con éxito");
 
       res.status(201).json({
         message: "Canción subida con éxito",
         song: result.rows[0],
       });
+
+      console.log("Carga de archivos concluida satisfactoriamente");
     } catch (err) {
-      console.error(err);
+      console.error("Error al añadir información en la base de datos:", err);
       res.status(500).json({ error: "Error al guardar la canción" });
     }
   }
