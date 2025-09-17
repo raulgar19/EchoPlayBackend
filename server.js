@@ -265,13 +265,41 @@ app.get("/songs/:id", async (req, res) => {
   }
 });
 
+// Endpoint para comprobar si la canción ya existe
+app.post("/songs/check", async (req, res) => {
+  const { title, artist } = req.body;
+
+  if (!title || !artist) {
+    console.error("Faltan datos para la comprobación");
+    return res.status(400).type("text/plain").send("Error: faltan datos");
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT * FROM songs WHERE name = $1 AND artist = $2",
+      [title, artist]
+    );
+
+    if (result.rows.length > 0) {
+      console.log(`La canción "${title}" de "${artist}" ya existe`);
+      res.type("text/plain").send("exists");
+    } else {
+      console.log(`La canción "${title}" de "${artist}" no existe`);
+      res.type("text/plain").send("not exists");
+    }
+  } catch (err) {
+    console.error("Error al comprobar la canción:", err);
+    res.status(500).type("text/plain").send("Error al comprobar la canción");
+  }
+});
+
 function normalizeString(str) {
   return str
     .normalize("NFD") // separa letras y tildes
-    .replace(/[\u0300-\u036f]/g, "") // elimina los diacríticos (tildes)
+    .replace(/[\u0300-\u036f]/g, "") // elimina tildes
     .replace(/\s+/g, "-") // reemplaza espacios por guiones
-    .replace(/[^a-zA-Z0-9\-]/g, "") // elimina caracteres no alfanuméricos excepto guion
-    .toLowerCase(); // pasa todo a minúsculas
+    .replace(/[^a-zA-Z0-9\-&]/g, "") // elimina caracteres no alfanuméricos excepto guion y &
+    .toLowerCase(); // minúsculas
 }
 
 // Configuración de multer
@@ -296,7 +324,7 @@ const storage = multer.diskStorage({
   },
 });
 
-// Filtro de archivos: solo JPG y MP3
+// Filtro de archivos
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === "cover" && file.mimetype === "image/jpeg")
     cb(null, true);
@@ -323,7 +351,10 @@ app.post(
 
     if (!title || !artist || !coverFile || !audioFile) {
       console.error("Error: faltan datos requeridos");
-      return res.status(400).json({ error: "Faltan datos requeridos" });
+      return res
+        .status(400)
+        .type("text/plain")
+        .send("Error: faltan datos requeridos");
     }
 
     console.log("Archivos recibidos con éxito");
@@ -336,15 +367,12 @@ app.post(
       );
       console.log("Información añadida con éxito");
 
-      res.status(201).json({
-        message: "Canción subida con éxito",
-        song: result.rows[0],
-      });
+      res.status(201).type("text/plain").send("Canción subida con éxito");
 
       console.log("Carga de archivos concluida satisfactoriamente");
     } catch (err) {
       console.error("Error al añadir información en la base de datos:", err);
-      res.status(500).json({ error: "Error al guardar la canción" });
+      res.status(500).type("text/plain").send("Error al guardar la canción");
     }
   }
 );
