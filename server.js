@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const path = require("path");
+const multer = require("multer");
+const fs = require("fs");
 
 const app = express();
 app.use(cors());
@@ -262,6 +264,82 @@ app.get("/songs/:id", async (req, res) => {
     res.status(500).json({ error: "Error al obtener la canción" });
   }
 });
+
+function normalizeString(str) {
+  return str
+    .normalize("NFD") // separa letras y tildes
+    .replace(/[\u0300-\u036f]/g, "") // elimina los diacríticos (tildes)
+    .replace(/\s+/g, "-") // reemplaza espacios por guiones
+    .replace(/[^a-zA-Z0-9\-]/g, "") // elimina caracteres no alfanuméricos excepto guion
+    .toLowerCase(); // pasa todo a minúsculas
+}
+
+// Configuración de multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    if (file.fieldname === "cover") cb(null, "covers");
+    else if (file.fieldname === "audio") cb(null, "music");
+  },
+  filename: (req, file, cb) => {
+    const { title, artist } = req.body;
+    const safeTitle = normalizeString(title);
+    const safeArtist = normalizeString(artist);
+
+    if (file.fieldname === "cover") {
+      cb(
+        null,
+        `${safeTitle}-${safeArtist}-cover${path.extname(file.originalname)}`
+      );
+    } else if (file.fieldname === "audio") {
+      cb(null, `${safeArtist}-${safeTitle}${path.extname(file.originalname)}`);
+    }
+  },
+});
+
+// Filtro de archivos: solo JPG y MP3
+const fileFilter = (req, file, cb) => {
+  if (file.fieldname === "cover" && file.mimetype === "image/jpeg")
+    cb(null, true);
+  else if (file.fieldname === "audio" && file.mimetype === "audio/mpeg")
+    cb(null, true);
+  else cb(new Error("Formato de archivo no permitido"));
+};
+
+const upload = multer({ storage, fileFilter });
+
+// Endpoint para subir canción
+app.post(
+  "/songs/upload",
+  upload.fields([
+    { name: "cover", maxCount: 1 },
+    { name: "audio", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    const { title, artist } = req.body;
+    const coverFile = req.files.cover ? req.files.cover[0].filename : null;
+    const audioFile = req.files.audio ? req.files.audio[0].filename : null;
+
+    if (!title || !artist || !coverFile || !audioFile) {
+      return res.status(400).json({ error: "Faltan datos requeridos" });
+    }
+
+    try {
+      // Guardar en la base de datos
+      const result = await pool.query(
+        "INSERT INTO songs (name, artist, cover, file) VALUES ($1, $2, $3, $4) RETURNING *",
+        [title, artist, coverFile, audioFile]
+      );
+
+      res.status(201).json({
+        message: "Canción subida con éxito",
+        song: result.rows[0],
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Error al guardar la canción" });
+    }
+  }
+);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
