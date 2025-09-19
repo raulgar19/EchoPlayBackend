@@ -377,6 +377,187 @@ app.post(
   }
 );
 
+function normalizeUserName(str) {
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9\-]/g, "")
+    .toLowerCase();
+}
+
+const userStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "images");
+  },
+  filename: (req, file, cb) => {
+    const { name } = req.body;
+    const safeName = normalizeUserName(name);
+    cb(null, `${safeName}.jpg`); // siempre JPG
+  },
+});
+
+const userFileFilter = (req, file, cb) => {
+  if (file.mimetype === "image/jpeg" || file.mimetype === "image/jpg") {
+    cb(null, true);
+  } else {
+    cb(new Error("Formato de imagen no permitido. Solo JPG."));
+  }
+};
+
+const uploadUserImage = multer({
+  storage: userStorage,
+  fileFilter: userFileFilter,
+});
+
+// Crear usuario
+app.post("/users", uploadUserImage.single("image"), async (req, res) => {
+  try {
+    console.log("Solicitud para crear un nuevo usuario recibida");
+
+    const { name } = req.body;
+    if (!name || !req.file) {
+      console.warn("Error: Falta 'name' o 'image' en la solicitud");
+      return res.status(400).json({ error: "Se requiere 'name' e 'image'" });
+    }
+
+    const imageFile = req.file.filename;
+    console.log(`Imagen recibida y guardada`);
+
+    // Insertar en la base de datos
+    const result = await pool.query(
+      "INSERT INTO users (name, image_file) VALUES ($1, $2) RETURNING id, name, image_file",
+      [name, imageFile]
+    );
+
+    const newUser = result.rows[0];
+    console.log(`Usuario creado con éxito`);
+
+    res.status(201).json({
+      message: "Usuario creado correctamente",
+    });
+
+    console.log("Respuesta enviada al cliente con los datos del nuevo usuario");
+  } catch (err) {
+    console.error("Error al crear usuario:", err);
+    res.status(500).json({ error: "Error al crear el usuario" });
+  }
+});
+
+app.delete("/users/:id", async (req, res) => {
+  const { id } = req.params;
+  console.log(`Solicitud de eliminación de usuario ID: ${id}`);
+
+  try {
+    // Obtener el usuario para saber su imagen
+    const resultUser = await pool.query("SELECT * FROM users WHERE id = $1", [
+      id,
+    ]);
+    if (resultUser.rows.length === 0) {
+      console.warn(`Usuario con ID ${id} no encontrado`);
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const user = resultUser.rows[0];
+    const imageFileName = user.image_file;
+    const imagePath = path.join(__dirname, "images", imageFileName);
+
+    console.log(
+      `Usuario encontrado. Procediendo a eliminar datos relacionados...`
+    );
+
+    // Eliminar relaciones playlist-canción
+    await pool.query(
+      `DELETE FROM playlist_songs
+       WHERE playlist_id IN (SELECT id FROM playlists WHERE user_id = $1)`,
+      [id]
+    );
+    console.log("Relaciones playlist-canción eliminadas");
+
+    // Eliminar playlists del usuario
+    await pool.query("DELETE FROM playlists WHERE user_id = $1", [id]);
+    console.log("Playlists del usuario eliminadas");
+
+    // Eliminar usuario
+    await pool.query("DELETE FROM users WHERE id = $1", [id]);
+    console.log("Usuario eliminado de la base de datos");
+
+    // Borrar imagen del disco si existe
+    if (fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+      console.log(`Imagen de perfil eliminada`);
+    } else {
+      console.warn(
+        `Imagen de perfil no encontrada en almacenamiento: ${imageFileName}`
+      );
+    }
+
+    console.log("Usuario y datos relacionados eliminados correctamente");
+    res.status(200).json({
+      message: "Usuario y datos relacionados eliminados correctamente",
+    });
+  } catch (err) {
+    console.error("Error al eliminar usuario:", err);
+    res.status(500).json({ error: "Error al eliminar usuario" });
+  }
+});
+
+// Endpoint para modificar usuario
+app.put("/users/:id", upload.single("image"), async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+
+  console.log(`Recibida petición de modificación para usuario ID: ${id}`);
+
+  if (!name) {
+    console.warn("Falta el nombre del usuario");
+    return res.status(400).json({ error: "Se requiere el nombre del usuario" });
+  }
+
+  try {
+    // Obtener el usuario actual
+    const resultUser = await pool.query("SELECT * FROM users WHERE id = $1", [
+      id,
+    ]);
+    if (resultUser.rows.length === 0) {
+      console.warn(`Usuario con ID ${id} no encontrado`);
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const user = resultUser.rows[0];
+    let imageFileName = user.image_file;
+
+    // Si se subió nueva imagen, reemplazar la existente
+    if (req.file) {
+      const uploadedFile = req.file;
+      const imagePath = path.join(__dirname, "images", imageFileName);
+
+      // Borrar imagen antigua si existe
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+        console.log(`Imagen antigua eliminada...`);
+      }
+
+      // Guardar la nueva imagen con el mismo nombre
+      fs.renameSync(uploadedFile.path, imagePath);
+      console.log(`Imagen nueva guardada con el mismo nombre...`);
+    }
+
+    // Actualizar nombre (y mantener image_file igual si no se cambió)
+    await pool.query(
+      "UPDATE users SET name = $1, image_file = $2 WHERE id = $3",
+      [name, imageFileName, id]
+    );
+
+    console.log(`Usuario ID ${id} actualizado correctamente`);
+
+    res.status(200).json({ message: "Usuario modificado correctamente" });
+  } catch (err) {
+    console.error("Error al modificar usuario:", err);
+    res.status(500).json({ error: "Error al modificar usuario" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
