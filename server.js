@@ -524,21 +524,80 @@ app.put("/users/:id", upload.single("image"), async (req, res) => {
   }
 });
 
-app.get("/app/version", (req, res) => {
-  console.log("Solicitud recibida para obtener la última versión de la app");
+const apkStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "apk");
+  },
+  filename: (req, file, cb) => {
+    const { version } = req.body;
+    const fileName = `echoplay-${version}.apk`;
+    cb(null, fileName);
+  },
+});
+
+const apkUpload = multer({
+  storage: apkStorage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/vnd.android.package-archive")
+      cb(null, true);
+    else cb(new Error("Solo se permiten archivos APK"));
+  },
+});
+
+// Subir APK
+app.post("/apk/upload", apkUpload.single("apk"), (req, res) => {
+  console.log("Solicitud recibida para subir APK");
+
+  if (!req.file) {
+    console.warn("Archivo APK no recibido o formato incorrecto");
+    return res
+      .status(400)
+      .json({ error: "Archivo APK no recibido o formato incorrecto" });
+  }
+
+  console.log(`APK subida correctamente: ${req.file.filename}`);
+  res.status(201).json({
+    message: `APK subida y renombrada a ${req.file.filename}`,
+    file: req.file.filename,
+  });
+});
+
+// Descargar APK
+app.get("/apk/download/:filename", (req, res) => {
+  const { filename } = req.params;
+  const filePath = path.join(__dirname, "apk", filename);
+
+  console.log(`Ruta absoluta del archivo: ${filePath}`);
+
+  if (!fs.existsSync(filePath)) {
+    console.warn(`Archivo APK no encontrado: ${filename}`);
+    return res.status(404).json({ error: "Archivo APK no encontrado" });
+  }
+
+  res.download(filePath, filename, (err) => {
+    if (err) {
+      console.error(`Error al descargar APK ${filename}:`, err);
+      res.status(500).json({ error: "Error al descargar APK" });
+    } else {
+      console.log(`APK descargada correctamente: ${filename}`);
+    }
+  });
+});
+
+// Endpoint para listar todas las APKs
+app.get("/apk/list", (req, res) => {
+  console.log("Solicitud recibida para listar todas las APKs");
 
   const apkFolder = path.join(__dirname, "apk");
-  console.log(`Ruta de la carpeta APK: ${apkFolder}`);
 
   if (!fs.existsSync(apkFolder)) {
-    console.warn("Carpeta de APK no encontrada");
-    return res.status(404).json({ error: "Carpeta de APK no encontrada" });
+    console.warn("Carpeta de APKs no encontrada");
+    return res.status(404).json({ error: "Carpeta de APKs no encontrada" });
   }
 
   const files = fs
     .readdirSync(apkFolder)
     .filter((file) => file.endsWith(".apk"));
-
   console.log(`Archivos APK encontrados: ${files.join(", ")}`);
 
   if (files.length === 0) {
@@ -546,7 +605,27 @@ app.get("/app/version", (req, res) => {
     return res.status(404).json({ error: "No hay APKs disponibles" });
   }
 
-  // Ordenar archivos por versión (asume nombre echoplay-x.x.x.apk)
+  // Devolver lista de archivos con URL para descarga
+  const apkList = files.map((file) => ({
+    name: file,
+    url: `${HOST}/apk/${file}`,
+  }));
+
+  console.log("Lista de APKs enviada correctamente");
+  res.json(apkList);
+});
+
+// Endpoint de versión de la app
+app.get("/app/version", (req, res) => {
+  const apkFolder = path.join(__dirname, "apk");
+
+  if (!fs.existsSync(apkFolder))
+    return res.status(404).json({ error: "Carpeta de APK no encontrada" });
+
+  const files = fs.readdirSync(apkFolder).filter((f) => f.endsWith(".apk"));
+  if (files.length === 0)
+    return res.status(404).json({ error: "No hay APKs disponibles" });
+
   files.sort((a, b) => {
     const versionA = a
       .replace("echoplay-", "")
@@ -558,28 +637,20 @@ app.get("/app/version", (req, res) => {
       .replace(".apk", "")
       .split(".")
       .map(Number);
-
-    console.log(`Comparando versiones: ${a} vs ${b}`);
-
     for (let i = 0; i < Math.max(versionA.length, versionB.length); i++) {
       const diff = (versionB[i] || 0) - (versionA[i] || 0);
-      if (diff !== 0) {
-        console.log(`Diferencia encontrada en posición ${i}: ${diff}`);
-        return diff;
-      }
+      if (diff !== 0) return diff;
     }
     return 0;
   });
 
   const latestApk = files[0];
-  console.log(`Última versión de APK seleccionada: ${latestApk}`);
-
   res.json({
     latest_version: latestApk.replace("echoplay-", "").replace(".apk", ""),
     apk_url: `${HOST}/apk/${latestApk}`,
   });
 });
 
-app.listen("3000", () => {
-  console.log(`Server running on port 3000`);
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
 });
