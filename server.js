@@ -9,8 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3000;
-const HOST = "192.168.1.36"; // 192.168.1.36     10.0.2.2
+const HOST = "http://192.168.1.35:3000"; // ✅ Ahora solo el host
 
 // Configuración de conexión a PostgreSQL
 const pool = new Pool({
@@ -25,6 +24,7 @@ const pool = new Pool({
 app.use("/covers", express.static(path.join(__dirname, "covers")));
 app.use("/images", express.static(path.join(__dirname, "images")));
 app.use("/music", express.static(path.join(__dirname, "music")));
+app.use("/apk", express.static(path.join(__dirname, "apk")));
 
 // Endpoint que obtiene todos los usuarios
 app.get("/users", async (req, res) => {
@@ -35,7 +35,7 @@ app.get("/users", async (req, res) => {
     const usuarios = result.rows.map((usuario) => ({
       id: usuario.id,
       name: usuario.name,
-      image: `http://${HOST}:${PORT}/images/${usuario.image_file}`,
+      image: `${HOST}/images/${usuario.image_file}`, // ✅ actualizado
     }));
 
     console.log("Usuarios obtenidos correctamente");
@@ -54,7 +54,6 @@ app.get("/users/:userId/playlists", async (req, res) => {
   try {
     console.log(`Obteniendo playlists del usuario con ID: ${userId}...`);
 
-    // Solo seleccionamos los campos necesarios
     const result = await pool.query(
       "SELECT id, name, user_id FROM playlists WHERE user_id = $1",
       [userId]
@@ -122,7 +121,6 @@ app.post("/playlists/:playlistId/songs", async (req, res) => {
       `Añadiendo canción con ID ${songId} a la playlist ${playlistId}...`
     );
 
-    // Comprobar si ya existe la relación
     const exists = await pool.query(
       "SELECT * FROM playlist_songs WHERE playlist_id = $1 AND song_id = $2",
       [playlistId, songId]
@@ -135,7 +133,6 @@ app.post("/playlists/:playlistId/songs", async (req, res) => {
         .json({ message: "La canción ya está en la playlist" });
     }
 
-    // Si no existe, insertar
     const result = await pool.query(
       "INSERT INTO playlist_songs (playlist_id, song_id) VALUES ($1, $2) RETURNING *",
       [playlistId, songId]
@@ -156,7 +153,6 @@ app.get("/playlists/:playlistId/songs", async (req, res) => {
   try {
     console.log(`Obteniendo canciones de la playlist con ID: ${playlistId}...`);
 
-    // Consulta que une playlist_songs con songs para obtener los datos de las canciones
     const result = await pool.query(
       `SELECT s.id, s.name, s.artist, s.cover, s.file
        FROM playlist_songs ps
@@ -169,8 +165,8 @@ app.get("/playlists/:playlistId/songs", async (req, res) => {
       id: song.id,
       name: song.name,
       artist: song.artist,
-      cover: `http://${HOST}:${PORT}/covers/${song.cover}`,
-      file: `http://${HOST}:${PORT}/music/${song.file}`,
+      cover: `${HOST}/covers/${song.cover}`, // ✅ actualizado
+      file: `${HOST}/music/${song.file}`, // ✅ actualizado
     }));
 
     console.log("Canciones de la playlist obtenidas correctamente");
@@ -183,37 +179,7 @@ app.get("/playlists/:playlistId/songs", async (req, res) => {
   }
 });
 
-// Endpoint para eliminar una canción de una playlist
-app.delete("/playlists/:playlistId/songs/:songId", async (req, res) => {
-  const { playlistId, songId } = req.params;
-
-  try {
-    console.log(
-      `Eliminando canción con ID ${songId} de la playlist ${playlistId}...`
-    );
-
-    const result = await pool.query(
-      "DELETE FROM playlist_songs WHERE playlist_id = $1 AND song_id = $2 RETURNING *",
-      [playlistId, songId]
-    );
-
-    if (result.rows.length === 0) {
-      console.log("La canción no estaba en la playlist");
-      return res
-        .status(404)
-        .json({ message: "La canción no se encontró en la playlist" });
-    }
-
-    console.log("Canción eliminada correctamente de la playlist");
-    res.status(200).json({ message: "Canción eliminada de la playlist" });
-  } catch (err) {
-    console.error(err);
-    res
-      .status(500)
-      .json({ error: "Error al eliminar la canción de la playlist" });
-  }
-});
-
+// Endpoint para obtener todas las canciones
 app.get("/songs", async (req, res) => {
   try {
     console.log("Obteniendo canciones...");
@@ -223,8 +189,8 @@ app.get("/songs", async (req, res) => {
       id: song.id,
       name: song.name,
       artist: song.artist,
-      cover: `http://${HOST}:${PORT}/covers/${song.cover}`,
-      file: `http://${HOST}:${PORT}/music/${song.file}`,
+      cover: `${HOST}/covers/${song.cover}`, // ✅ actualizado
+      file: `${HOST}/music/${song.file}`, // ✅ actualizado
     }));
 
     console.log("Canciones obtenidas correctamente");
@@ -253,8 +219,8 @@ app.get("/songs/:id", async (req, res) => {
       id: song.id,
       name: song.name,
       artist: song.artist,
-      cover: `http://${HOST}:${PORT}/covers/${song.cover}`,
-      file: `http://${HOST}:${PORT}/music/${song.file}`,
+      cover: `${HOST}/covers/${song.cover}`, // ✅ actualizado
+      file: `${HOST}/music/${song.file}`, // ✅ actualizado
     };
 
     console.log("Canción obtenida correctamente");
@@ -558,6 +524,62 @@ app.put("/users/:id", upload.single("image"), async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.get("/app/version", (req, res) => {
+  console.log("Solicitud recibida para obtener la última versión de la app");
+
+  const apkFolder = path.join(__dirname, "apk");
+  console.log(`Ruta de la carpeta APK: ${apkFolder}`);
+
+  if (!fs.existsSync(apkFolder)) {
+    console.warn("Carpeta de APK no encontrada");
+    return res.status(404).json({ error: "Carpeta de APK no encontrada" });
+  }
+
+  const files = fs
+    .readdirSync(apkFolder)
+    .filter((file) => file.endsWith(".apk"));
+
+  console.log(`Archivos APK encontrados: ${files.join(", ")}`);
+
+  if (files.length === 0) {
+    console.warn("No hay APKs disponibles");
+    return res.status(404).json({ error: "No hay APKs disponibles" });
+  }
+
+  // Ordenar archivos por versión (asume nombre echoplay-x.x.x.apk)
+  files.sort((a, b) => {
+    const versionA = a
+      .replace("echoplay-", "")
+      .replace(".apk", "")
+      .split(".")
+      .map(Number);
+    const versionB = b
+      .replace("echoplay-", "")
+      .replace(".apk", "")
+      .split(".")
+      .map(Number);
+
+    console.log(`Comparando versiones: ${a} vs ${b}`);
+
+    for (let i = 0; i < Math.max(versionA.length, versionB.length); i++) {
+      const diff = (versionB[i] || 0) - (versionA[i] || 0);
+      if (diff !== 0) {
+        console.log(`Diferencia encontrada en posición ${i}: ${diff}`);
+        return diff;
+      }
+    }
+    return 0;
+  });
+
+  const latestApk = files[0];
+  console.log(`Última versión de APK seleccionada: ${latestApk}`);
+
+  res.json({
+    latest_version: latestApk.replace("echoplay-", "").replace(".apk", ""),
+    apk_url: `${HOST}/apk/${latestApk}`,
+  });
+});
+
+app.listen("3000", () => {
+  console.log(`Server running on port 3000`);
 });
