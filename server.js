@@ -529,18 +529,24 @@ const apkStorage = multer.diskStorage({
     cb(null, "apk");
   },
   filename: (req, file, cb) => {
-    const { version } = req.body;
-    const fileName = `echoplay-${version}.apk`;
-    cb(null, fileName);
+    // Guardar con el nombre que ya viene
+    cb(null, file.originalname);
   },
 });
 
 const apkUpload = multer({
   storage: apkStorage,
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === "application/vnd.android.package-archive")
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (
+      file.mimetype === "application/vnd.android.package-archive" ||
+      file.mimetype === "application/octet-stream" ||
+      ext === ".apk"
+    ) {
       cb(null, true);
-    else cb(new Error("Solo se permiten archivos APK"));
+    } else {
+      cb(new Error("Solo se permiten archivos APK"));
+    }
   },
 });
 
@@ -557,7 +563,7 @@ app.post("/apk/upload", apkUpload.single("apk"), (req, res) => {
 
   console.log(`APK subida correctamente: ${req.file.filename}`);
   res.status(201).json({
-    message: `APK subida y renombrada a ${req.file.filename}`,
+    message: `APK subida correctamente como ${req.file.filename}`,
     file: req.file.filename,
   });
 });
