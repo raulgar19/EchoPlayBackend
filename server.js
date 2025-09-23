@@ -231,6 +231,44 @@ app.get("/songs/:id", async (req, res) => {
   }
 });
 
+// Endpoint para eliminar una canción de una playlist
+app.delete("/playlists/:playlistId/songs/:songId", async (req, res) => {
+  const { playlistId, songId } = req.params;
+
+  try {
+    console.log(
+      `Eliminando canción con ID ${songId} de la playlist ${playlistId}...`
+    );
+
+    // Primero verificar si la relación existe
+    const exists = await pool.query(
+      "SELECT * FROM playlist_songs WHERE playlist_id = $1 AND song_id = $2",
+      [playlistId, songId]
+    );
+
+    if (exists.rows.length === 0) {
+      console.warn("La canción no estaba en la playlist");
+      return res
+        .status(404)
+        .json({ error: "La canción no está en la playlist" });
+    }
+
+    // Eliminar de la relación
+    await pool.query(
+      "DELETE FROM playlist_songs WHERE playlist_id = $1 AND song_id = $2",
+      [playlistId, songId]
+    );
+
+    console.log("Canción eliminada correctamente de la playlist");
+    res.status(200).json({ message: "Canción eliminada de la playlist" });
+  } catch (err) {
+    console.error("Error al eliminar la canción de la playlist:", err);
+    res
+      .status(500)
+      .json({ error: "Error al eliminar la canción de la playlist" });
+  }
+});
+
 // Endpoint para comprobar si la canción ya existe
 app.post("/songs/check", async (req, res) => {
   const { title, artist } = req.body;
