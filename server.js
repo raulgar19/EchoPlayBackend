@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const HOST = "http://192.168.1.35:3000"; // ✅ Ahora solo el host
+const HOST = "https://downloaded-warranty-skill-common.trycloudflare.com"; // ✅ Ahora solo el host
 
 // Configuración de conexión a PostgreSQL
 const pool = new Pool({
