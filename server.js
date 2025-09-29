@@ -269,6 +269,37 @@ app.delete("/playlists/:playlistId/songs/:songId", async (req, res) => {
   }
 });
 
+// Endpoint para eliminar una playlist
+app.delete("/playlists/:playlistId", async (req, res) => {
+  const { playlistId } = req.params;
+  console.log(`Solicitud para eliminar playlist ID: ${playlistId}`);
+
+  try {
+    // 1. Eliminar relaciones en la tabla intermedia
+    await pool.query("DELETE FROM playlist_songs WHERE playlist_id = $1", [
+      playlistId,
+    ]);
+    console.log("Relaciones playlist-canción eliminadas");
+
+    // 2. Eliminar la playlist
+    const result = await pool.query(
+      "DELETE FROM playlists WHERE id = $1 RETURNING *",
+      [playlistId]
+    );
+
+    if (result.rows.length === 0) {
+      console.warn(`Playlist con ID ${playlistId} no encontrada`);
+      return res.status(404).json({ error: "Playlist no encontrada" });
+    }
+
+    console.log("Playlist eliminada correctamente");
+    res.status(200).json({ message: "Playlist eliminada correctamente" });
+  } catch (err) {
+    console.error("Error al eliminar playlist:", err);
+    res.status(500).json({ error: "Error al eliminar la playlist" });
+  }
+});
+
 // Endpoint para comprobar si la canción ya existe
 app.post("/songs/check", async (req, res) => {
   const { title, artist } = req.body;
