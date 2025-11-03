@@ -9,7 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const HOST = "http://localhost:3000";
+const HOST = "http://192.168.1.37:3000";
 
 // Ruta base para archivos (usar doble backslash en Windows)
 const FILES_BASE = "E:\\echoplay";
@@ -19,7 +19,7 @@ const ensureDirs = [
   path.join(FILES_BASE, "covers"),
   path.join(FILES_BASE, "images"),
   path.join(FILES_BASE, "music"),
-  path.join(FILES_BASE, "apk"),
+  path.join(FILES_BASE, "apks"),
 ];
 for (const dir of ensureDirs) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -38,7 +38,7 @@ const pool = new Pool({
 app.use("/covers", express.static(path.join(FILES_BASE, "covers")));
 app.use("/images", express.static(path.join(FILES_BASE, "images")));
 app.use("/music", express.static(path.join(FILES_BASE, "music")));
-app.use("/apk", express.static(path.join(FILES_BASE, "apks")));
+app.use("/apks", express.static(path.join(FILES_BASE, "apks")));
 
 // Endpoint que obtiene todos los usuarios
 app.get("/users", async (req, res) => {
@@ -612,7 +612,7 @@ app.put("/users/:id", uploadUserImage.single("image"), async (req, res) => {
 
 const apkStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(FILES_BASE, "apk"));
+    cb(null, path.join(FILES_BASE, "apks"));
   },
   filename: (req, file, cb) => {
     // Guardar con el nombre que ya viene
@@ -657,7 +657,7 @@ app.post("/apk/upload", apkUpload.single("apk"), (req, res) => {
 // Descargar APK
 app.get("/apk/download/:filename", (req, res) => {
   const { filename } = req.params;
-  const filePath = path.join(FILES_BASE, "apk", filename);
+  const filePath = path.join(FILES_BASE, "apks", filename);
 
   console.log(`Ruta absoluta del archivo: ${filePath}`);
 
@@ -680,7 +680,7 @@ app.get("/apk/download/:filename", (req, res) => {
 app.get("/apk/list", (req, res) => {
   console.log("Solicitud recibida para listar todas las APKs");
 
-  const apkFolder = path.join(FILES_BASE, "apk");
+  const apkFolder = path.join(FILES_BASE, "apks");
 
   if (!fs.existsSync(apkFolder)) {
     console.warn("Carpeta de APKs no encontrada");
@@ -709,7 +709,7 @@ app.get("/apk/list", (req, res) => {
 
 // Endpoint de versión de la app
 app.get("/app/version", (req, res) => {
-  const apkFolder = path.join(FILES_BASE, "apk");
+  const apkFolder = path.join(FILES_BASE, "apks");
 
   if (!fs.existsSync(apkFolder))
     return res.status(404).json({ error: "Carpeta de APK no encontrada" });
