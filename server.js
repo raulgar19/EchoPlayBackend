@@ -9,7 +9,21 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const HOST = "https://downloaded-warranty-skill-common.trycloudflare.com"; // ✅ Ahora solo el host
+const HOST = "http://localhost:3000";
+
+// Ruta base para archivos (usar doble backslash en Windows)
+const FILES_BASE = "E:\\echoplay";
+
+// Asegurarse de que las carpetas existan en el disco externo
+const ensureDirs = [
+  path.join(FILES_BASE, "covers"),
+  path.join(FILES_BASE, "images"),
+  path.join(FILES_BASE, "music"),
+  path.join(FILES_BASE, "apk"),
+];
+for (const dir of ensureDirs) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
 
 // Configuración de conexión a PostgreSQL
 const pool = new Pool({
@@ -20,11 +34,11 @@ const pool = new Pool({
   port: 55432,
 });
 
-// Servir carpeta de imágenes, covers y archivos de audio
-app.use("/covers", express.static(path.join(__dirname, "covers")));
-app.use("/images", express.static(path.join(__dirname, "images")));
-app.use("/music", express.static(path.join(__dirname, "music")));
-app.use("/apk", express.static(path.join(__dirname, "apk")));
+// Servir carpeta de imágenes, covers y archivos de audio desde FILES_BASE
+app.use("/covers", express.static(path.join(FILES_BASE, "covers")));
+app.use("/images", express.static(path.join(FILES_BASE, "images")));
+app.use("/music", express.static(path.join(FILES_BASE, "music")));
+app.use("/apk", express.static(path.join(FILES_BASE, "apks")));
 
 // Endpoint que obtiene todos los usuarios
 app.get("/users", async (req, res) => {
@@ -165,8 +179,8 @@ app.get("/playlists/:playlistId/songs", async (req, res) => {
       id: song.id,
       name: song.name,
       artist: song.artist,
-      cover: `${HOST}/covers/${song.cover}`, // ✅ actualizado
-      file: `${HOST}/music/${song.file}`, // ✅ actualizado
+      cover: `${HOST}/covers/${song.cover}`,
+      file: `${HOST}/music/${song.file}`,
     }));
 
     console.log("Canciones de la playlist obtenidas correctamente");
@@ -179,7 +193,6 @@ app.get("/playlists/:playlistId/songs", async (req, res) => {
   }
 });
 
-// Endpoint para obtener todas las canciones
 app.get("/songs", async (req, res) => {
   try {
     console.log("Obteniendo canciones...");
@@ -189,8 +202,8 @@ app.get("/songs", async (req, res) => {
       id: song.id,
       name: song.name,
       artist: song.artist,
-      cover: `${HOST}/covers/${song.cover}`, // ✅ actualizado
-      file: `${HOST}/music/${song.file}`, // ✅ actualizado
+      cover: `${HOST}/covers/${song.cover}`,
+      file: `${HOST}/music/${song.file}`,
     }));
 
     console.log("Canciones obtenidas correctamente");
@@ -340,8 +353,9 @@ function normalizeString(str) {
 // Configuración de multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    if (file.fieldname === "cover") cb(null, "covers");
-    else if (file.fieldname === "audio") cb(null, "music");
+    if (file.fieldname === "cover") cb(null, path.join(FILES_BASE, "covers"));
+    else if (file.fieldname === "audio")
+      cb(null, path.join(FILES_BASE, "music"));
   },
   filename: (req, file, cb) => {
     const { title, artist } = req.body;
@@ -423,7 +437,7 @@ function normalizeUserName(str) {
 
 const userStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "images");
+    cb(null, path.join(FILES_BASE, "images"));
   },
   filename: (req, file, cb) => {
     const { name } = req.body;
@@ -495,7 +509,7 @@ app.delete("/users/:id", async (req, res) => {
 
     const user = resultUser.rows[0];
     const imageFileName = user.image_file;
-    const imagePath = path.join(__dirname, "images", imageFileName);
+    const imagePath = path.join(FILES_BASE, "images", imageFileName);
 
     console.log(
       `Usuario encontrado. Procediendo a eliminar datos relacionados...`
@@ -538,7 +552,7 @@ app.delete("/users/:id", async (req, res) => {
 });
 
 // Endpoint para modificar usuario
-app.put("/users/:id", upload.single("image"), async (req, res) => {
+app.put("/users/:id", uploadUserImage.single("image"), async (req, res) => {
   const { id } = req.params;
   const { name } = req.body;
 
@@ -565,7 +579,7 @@ app.put("/users/:id", upload.single("image"), async (req, res) => {
     // Si se subió nueva imagen, reemplazar la existente
     if (req.file) {
       const uploadedFile = req.file;
-      const imagePath = path.join(__dirname, "images", imageFileName);
+      const imagePath = path.join(FILES_BASE, "images", imageFileName);
 
       // Borrar imagen antigua si existe
       if (fs.existsSync(imagePath)) {
@@ -573,8 +587,11 @@ app.put("/users/:id", upload.single("image"), async (req, res) => {
         console.log(`Imagen antigua eliminada...`);
       }
 
-      // Guardar la nueva imagen con el mismo nombre
-      fs.renameSync(uploadedFile.path, imagePath);
+      // Si multer ya guardó con el nombre final, uploadedFile.path será el mismo.
+      // Asegurar que el archivo esté en la ubicación final
+      if (uploadedFile.path !== imagePath) {
+        fs.renameSync(uploadedFile.path, imagePath);
+      }
       console.log(`Imagen nueva guardada con el mismo nombre...`);
     }
 
@@ -595,7 +612,7 @@ app.put("/users/:id", upload.single("image"), async (req, res) => {
 
 const apkStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, "apk");
+    cb(null, path.join(FILES_BASE, "apk"));
   },
   filename: (req, file, cb) => {
     // Guardar con el nombre que ya viene
@@ -640,7 +657,7 @@ app.post("/apk/upload", apkUpload.single("apk"), (req, res) => {
 // Descargar APK
 app.get("/apk/download/:filename", (req, res) => {
   const { filename } = req.params;
-  const filePath = path.join(__dirname, "apk", filename);
+  const filePath = path.join(FILES_BASE, "apk", filename);
 
   console.log(`Ruta absoluta del archivo: ${filePath}`);
 
@@ -663,7 +680,7 @@ app.get("/apk/download/:filename", (req, res) => {
 app.get("/apk/list", (req, res) => {
   console.log("Solicitud recibida para listar todas las APKs");
 
-  const apkFolder = path.join(__dirname, "apk");
+  const apkFolder = path.join(FILES_BASE, "apk");
 
   if (!fs.existsSync(apkFolder)) {
     console.warn("Carpeta de APKs no encontrada");
@@ -692,7 +709,7 @@ app.get("/apk/list", (req, res) => {
 
 // Endpoint de versión de la app
 app.get("/app/version", (req, res) => {
-  const apkFolder = path.join(__dirname, "apk");
+  const apkFolder = path.join(FILES_BASE, "apk");
 
   if (!fs.existsSync(apkFolder))
     return res.status(404).json({ error: "Carpeta de APK no encontrada" });
