@@ -3,34 +3,6 @@ const router = express.Router();
 const pool = require("../config/database");
 const { HOST } = require("../config/constants");
 
-// Obtener las playlists de un usuario
-router.get("/users/:userId/playlists", async (req, res) => {
-  const { userId } = req.params;
-
-  try {
-    console.log(`Obteniendo playlists del usuario con ID: ${userId}...`);
-
-    const result = await pool.query(
-      "SELECT id, name, user_id FROM playlists WHERE user_id = $1",
-      [userId]
-    );
-
-    const playlists = result.rows.map((playlist) => ({
-      id: playlist.id,
-      name: playlist.name,
-      userId: playlist.user_id,
-    }));
-
-    console.log("Playlists obtenidas correctamente");
-    res.json(playlists);
-  } catch (err) {
-    console.error(err);
-    res
-      .status(500)
-      .json({ error: "Error al obtener las playlists del usuario" });
-  }
-});
-
 // Crear una nueva playlist
 router.post("/", async (req, res) => {
   console.log("Obteniendo y añadiendo nueva playlist...");
