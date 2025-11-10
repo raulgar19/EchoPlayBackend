@@ -1,22 +1,11 @@
-const path = require("path");
-const fs = require("fs");
+// Configuración de la aplicación
+const HOST = "http://192.168.1.40:3000/";
 
-const HOST = "https://virtually-prayers-explained-contractor.trycloudflare.com";
-const FILES_BASE = "D:\\echoplay";
-
-// Asegurarse de que las carpetas existan en el disco externo
-const ensureDirs = [
-  path.join(FILES_BASE, "covers"),
-  path.join(FILES_BASE, "images"),
-  path.join(FILES_BASE, "music"),
-  path.join(FILES_BASE, "apks"),
-];
-
-for (const dir of ensureDirs) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
+// Base URL para archivos de Google Drive
+// Formato: https://drive.google.com/uc?export=view&id=FILE_ID
+const GDRIVE_BASE_URL = "https://drive.google.com/uc?export=view&id=";
 
 module.exports = {
   HOST,
-  FILES_BASE,
+  GDRIVE_BASE_URL,
 };

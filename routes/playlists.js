@@ -1,178 +1,120 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../config/database");
-const { HOST } = require("../config/constants");
 
-// Crear una nueva playlist
-router.post("/", async (req, res) => {
-  console.log("Obteniendo y añadiendo nueva playlist...");
+// Función para asegurar formato correcto de URL de Google Drive
+function formatGDriveUrl(url) {
+  if (!url) return null;
 
-  const { name, userId } = req.body;
+  // Si ya está en formato correcto
+  if (url.includes("uc?export=view&id=")) return url;
 
-  if (!name || !userId) {
-    return res.status(400).json({ error: "Se requiere 'name' y 'userId'" });
+  // Extraer ID de diferentes formatos de URL de Google Drive
+  let fileId = null;
+
+  // Formato: https://drive.google.com/file/d/FILE_ID/view
+  const match1 = url.match(/\/file\/d\/([^\/]+)/);
+  if (match1) fileId = match1[1];
+
+  // Formato: https://drive.google.com/open?id=FILE_ID
+  const match2 = url.match(/[?&]id=([^&]+)/);
+  if (match2) fileId = match2[1];
+
+  // Si encontramos el ID, devolver formato correcto
+  if (fileId) {
+    return `https://drive.google.com/uc?export=view&id=${fileId}`;
   }
 
+  // Si no se pudo convertir, devolver original
+  return url;
+}
+
+router.get("/users/:userId/playlists", async (req, res) => {
   try {
-    console.log(`Creando nueva playlist para el usuario con ID: ${userId}...`);
-
     const result = await pool.query(
-      "INSERT INTO playlists (name, user_id) VALUES ($1, $2) RETURNING id, name, user_id",
-      [name, userId]
+      "SELECT * FROM playlists WHERE user_id = $1",
+      [req.params.userId]
     );
-
-    const newPlaylist = result.rows[0];
-
-    console.log("Playlist creada correctamente");
-    res.status(201).json({
-      id: newPlaylist.id,
-      name: newPlaylist.name,
-      userId: newPlaylist.user_id,
-    });
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error al crear la playlist" });
+    res.status(500).json({ error: "Error al obtener playlists" });
   }
 });
 
-// Eliminar una playlist
-router.delete("/:playlistId", async (req, res) => {
-  const { playlistId } = req.params;
-  console.log(`Solicitud para eliminar playlist ID: ${playlistId}`);
-
+router.post("/", async (req, res) => {
   try {
-    // 1. Eliminar relaciones en la tabla intermedia
-    await pool.query("DELETE FROM playlist_songs WHERE playlist_id = $1", [
-      playlistId,
-    ]);
-    console.log("Relaciones playlist-canción eliminadas");
-
-    // 2. Eliminar la playlist
+    const { name, userId } = req.body;
     const result = await pool.query(
-      "DELETE FROM playlists WHERE id = $1 RETURNING *",
-      [playlistId]
+      "INSERT INTO playlists (name, user_id) VALUES ($1, $2) RETURNING *",
+      [name, userId]
     );
-
-    if (result.rows.length === 0) {
-      console.warn(`Playlist con ID ${playlistId} no encontrada`);
-      return res.status(404).json({ error: "Playlist no encontrada" });
-    }
-
-    console.log("Playlist eliminada correctamente");
-    res.status(200).json({ message: "Playlist eliminada correctamente" });
-  } catch (err) {
-    console.error("Error al eliminar playlist:", err);
-    res.status(500).json({ error: "Error al eliminar la playlist" });
-  }
-});
-
-// Añadir una canción a una playlist
-router.post("/:playlistId/songs", async (req, res) => {
-  const { playlistId } = req.params;
-  const { songId } = req.body;
-
-  if (!songId) {
-    return res.status(400).json({ error: "Se requiere 'songId'" });
-  }
-
-  try {
-    console.log(
-      `Añadiendo canción con ID ${songId} a la playlist ${playlistId}...`
-    );
-
-    const exists = await pool.query(
-      "SELECT * FROM playlist_songs WHERE playlist_id = $1 AND song_id = $2",
-      [playlistId, songId]
-    );
-
-    if (exists.rows.length > 0) {
-      console.log("La canción ya existe en la playlist, no se hace nada");
-      return res
-        .status(200)
-        .json({ message: "La canción ya está en la playlist" });
-    }
-
-    const result = await pool.query(
-      "INSERT INTO playlist_songs (playlist_id, song_id) VALUES ($1, $2) RETURNING *",
-      [playlistId, songId]
-    );
-
-    console.log("Canción añadida correctamente a la playlist");
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Error al añadir la canción a la playlist" });
+    res.status(500).json({ error: "Error al crear playlist" });
   }
 });
 
-// Obtener las canciones de una playlist específica
-router.get("/:playlistId/songs", async (req, res) => {
-  const { playlistId } = req.params;
-
+router.delete("/:playlistId", async (req, res) => {
   try {
-    console.log(`Obteniendo canciones de la playlist con ID: ${playlistId}...`);
+    await pool.query("DELETE FROM playlist_songs WHERE playlist_id = $1", [
+      req.params.playlistId,
+    ]);
+    await pool.query("DELETE FROM playlists WHERE id = $1", [
+      req.params.playlistId,
+    ]);
+    res.json({ message: "Playlist eliminada" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar playlist" });
+  }
+});
 
+router.post("/:playlistId/songs", async (req, res) => {
+  try {
+    const { songId } = req.body;
     const result = await pool.query(
-      `SELECT s.id, s.name, s.artist, s.cover, s.file
-       FROM playlist_songs ps
-       JOIN songs s ON ps.song_id = s.id
-       WHERE ps.playlist_id = $1`,
-      [playlistId]
+      "INSERT INTO playlist_songs (playlist_id, song_id) VALUES ($1, $2) RETURNING *",
+      [req.params.playlistId, songId]
     );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al añadir canción" });
+  }
+});
 
+router.get("/:playlistId/songs", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT s.* FROM songs s JOIN playlist_songs ps ON s.id = ps.song_id WHERE ps.playlist_id = $1",
+      [req.params.playlistId]
+    );
     const songs = result.rows.map((song) => ({
       id: song.id,
       name: song.name,
       artist: song.artist,
-      cover: `${HOST}/covers/${song.cover}`,
-      file: `${HOST}/music/${song.file}`,
+      cover: formatGDriveUrl(song.cover),
+      file: formatGDriveUrl(song.file),
     }));
-
-    console.log("Canciones de la playlist obtenidas correctamente");
     res.json(songs);
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ error: "Error al obtener las canciones de la playlist" });
+    res.status(500).json({ error: "Error al obtener canciones" });
   }
 });
 
-// Eliminar una canción de una playlist
 router.delete("/:playlistId/songs/:songId", async (req, res) => {
-  const { playlistId, songId } = req.params;
-
   try {
-    console.log(
-      `Eliminando canción con ID ${songId} de la playlist ${playlistId}...`
-    );
-
-    // Primero verificar si la relación existe
-    const exists = await pool.query(
-      "SELECT * FROM playlist_songs WHERE playlist_id = $1 AND song_id = $2",
-      [playlistId, songId]
-    );
-
-    if (exists.rows.length === 0) {
-      console.warn("La canción no estaba en la playlist");
-      return res
-        .status(404)
-        .json({ error: "La canción no está en la playlist" });
-    }
-
-    // Eliminar de la relación
     await pool.query(
       "DELETE FROM playlist_songs WHERE playlist_id = $1 AND song_id = $2",
-      [playlistId, songId]
+      [req.params.playlistId, req.params.songId]
     );
-
-    console.log("Canción eliminada correctamente de la playlist");
-    res.status(200).json({ message: "Canción eliminada de la playlist" });
+    res.json({ message: "Canción eliminada" });
   } catch (err) {
-    console.error("Error al eliminar la canción de la playlist:", err);
-    res
-      .status(500)
-      .json({ error: "Error al eliminar la canción de la playlist" });
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar canción" });
   }
 });
 

@@ -1,7 +1,6 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
-const { FILES_BASE } = require("./config/constants");
 
 // Importar rutas
 const usersRoutes = require("./routes/users");
@@ -15,11 +14,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Servir archivos estáticos desde FILES_BASE
-app.use("/covers", express.static(path.join(FILES_BASE, "covers")));
-app.use("/images", express.static(path.join(FILES_BASE, "images")));
-app.use("/music", express.static(path.join(FILES_BASE, "music")));
-app.use("/apks", express.static(path.join(FILES_BASE, "apks")));
+// Middleware de logging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+  next();
+});
 
 // Registrar rutas
 app.use("/users", usersRoutes);
@@ -30,6 +29,7 @@ app.use("/app", apkRoutes); // Para /app/version
 
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`Accessible at http://192.168.1.40:${PORT}`);
 });
