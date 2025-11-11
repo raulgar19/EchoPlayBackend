@@ -3,8 +3,17 @@ const fs = require("fs");
 const path = require("path");
 const readline = require("readline");
 
-const CREDENTIALS_PATH = path.join(__dirname, "../oauth-credentials.json");
-const TOKEN_PATH = path.join(__dirname, "../token.json");
+// En producción (Render), buscar en /etc/secrets/
+// En desarrollo local, buscar en la raíz del proyecto
+const isProduction =
+  process.env.NODE_ENV === "production" || process.env.RENDER;
+const CREDENTIALS_PATH = isProduction
+  ? "/etc/secrets/oauth-credentials.json"
+  : path.join(__dirname, "../oauth-credentials.json");
+const TOKEN_PATH = isProduction
+  ? "/etc/secrets/token.json"
+  : path.join(__dirname, "../token.json");
+
 const SCOPES = [
   "https://www.googleapis.com/auth/drive.file", // Acceso a archivos creados por la app
   "https://www.googleapis.com/auth/drive", // Acceso completo a Drive
