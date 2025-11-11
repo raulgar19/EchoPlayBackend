@@ -3,10 +3,11 @@ const express = require("express");
 const cors = require("cors");
 
 // Importar rutas
-const usersRoutes = require("./routes/users");
-const playlistsRoutes = require("./routes/playlists");
-const songsRoutes = require("./routes/songs");
-const apkRoutes = require("./routes/apk");
+const usersRouter = require("./routes/users");
+const playlistsRouter = require("./routes/playlists");
+const songsRouter = require("./routes/songs");
+const apkRouter = require("./routes/apk");
+const driveRouter = require("./routes/drive");
 
 const app = express();
 
@@ -21,11 +22,13 @@ app.use((req, res, next) => {
 });
 
 // Registrar rutas
-app.use("/users", usersRoutes);
-app.use("/playlists", playlistsRoutes);
-app.use("/songs", songsRoutes);
-app.use("/apk", apkRoutes);
-app.use("/app", apkRoutes); // Para /app/version
+// Rutas
+app.use("/users", usersRouter);
+app.use("/playlists", playlistsRouter);
+app.use("/songs", songsRouter);
+app.use("/apk", apkRouter);
+app.use("/drive", driveRouter);
+app.use("/app", apkRouter); // Para /app/version
 
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;

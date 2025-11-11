@@ -5,7 +5,10 @@ const readline = require("readline");
 
 const CREDENTIALS_PATH = path.join(__dirname, "../oauth-credentials.json");
 const TOKEN_PATH = path.join(__dirname, "../token.json");
-const SCOPES = ["https://www.googleapis.com/auth/drive.file"];
+const SCOPES = [
+  "https://www.googleapis.com/auth/drive.file", // Acceso a archivos creados por la app
+  "https://www.googleapis.com/auth/drive", // Acceso completo a Drive
+];
 
 /**
  * Genera el token de autenticación OAuth (solo se ejecuta una vez)
